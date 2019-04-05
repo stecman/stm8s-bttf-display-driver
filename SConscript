@@ -59,7 +59,7 @@ env = Environment(
     CPPPATH = [
         '',
         '.',
-        '../../driver/inc',
+        '../driver/inc',
         '../lib',
     ],
 
@@ -84,7 +84,7 @@ env.Default(
         [
             'main.c',
             'lib/generic/delay.c',
-            '../../driver/src/stm8s_spi.c',
+            'driver/src/stm8s_spi.c',
         ]
     )
 )
