@@ -83,7 +83,6 @@ env.Default(
         HEX_FILE,
         [
             'main.c',
-            'lib/generic/delay.c',
             'driver/src/stm8s_spi.c',
         ]
     )

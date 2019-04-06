@@ -1,8 +1,6 @@
 #include "stm8s.h"
 
 #include "ascii.h"
-#include "generic/delay.h"
-
 #include <string.h>
 
 // Pin assignments
@@ -244,26 +242,23 @@ inline void setOutputDigit(int8_t digit)
     }
 }
 
-inline void configureDisplayTimer()
+void configureDisplayTimer()
 {
-    const uint16_t delayUs = 200; // 5KHz
+    // Prescale by 128 to a 125KHz clock (assuming 16MHz main clock)
+    TIM4->PSCR = TIM4_PRESCALER_128;
 
-    // Prescale by 16 to count in microseconds (clock at 15Mhz)
-    TIM2->PSCR = TIM2_PRESCALER_16;
-
-    // Load refresh delay into timer
-    TIM2->ARRH = (delayUs >> 8);
-    TIM2->ARRL = (delayUs & 0xFF);
+    // Load refresh delay into timer (multiples of 8uS)
+    // 5KHz gives a non-flickery display without updating unnecessarily often
+    TIM4->ARR = 25;
 
     // Enable timer
-    TIM2->EGR |= TIM2_EVENTSOURCE_UPDATE;
-    TIM2->CR1 |= TIM2_CR1_CEN;
+    TIM4->CR1 |= TIM4_CR1_CEN;
 }
 
 int main(void)
 {
     // Temporary phrase to load onto the display
-    static const char phrase[] = "DEC0220180802";
+    static const char phrase[] = "OCT2619850122";
 
     // Configure the clock for maximum speed on the 16MHz HSI oscillator
     // (After reset the clock output is divided by 8)
@@ -297,8 +292,8 @@ int main(void)
         static int8_t digit = 0;
 
         // If display timer has overflowed, switch output to the next digit
-        if (TIM2->SR1 & TIM2_SR1_UIF) {
-            TIM2->SR1 &= ~TIM2_SR1_UIF;
+        if (TIM4->SR1 & TIM4_SR1_UIF) {
+            TIM4->SR1 &= ~TIM4_SR1_UIF;
 
             setOutputDigit(digit);
 
