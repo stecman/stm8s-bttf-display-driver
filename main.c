@@ -1,7 +1,10 @@
 #include "stm8s.h"
 
-#include "ascii.h"
+#include <stdbool.h>
 #include <string.h>
+
+#include "ascii.h"
+#include "interface.h"
 
 // Pin assignments
 #define PD2_DIGIT_SHIFT_CLK (1<<2)
@@ -242,6 +245,90 @@ inline void setOutputDigit(int8_t digit)
     }
 }
 
+void enableTimeSeparator(bool enabled)
+{
+    // Enable/disable PWM output on time separator LEDs
+    if (enabled) {
+        TIM2->CCER1 |= TIM2_CCER1_CC1E;
+    } else {
+        TIM2->CCER1 &= ~TIM2_CCER1_CC1E;
+    }
+}
+
+/**
+ * Set which of the AM/PM leds are turned on
+ */
+void enablePeriodLed(BTTF_Period period)
+{
+    // Enable/disable PWM output for AM LED
+    if (period & BTTF_Period_AM) {
+        TIM1->CCER2 |= TIM1_CCER2_CC3E;
+    } else {
+        TIM1->CCER2 &= ~TIM1_CCER2_CC3E;
+    }
+
+    // Enable/disable PWM output for PM LED
+    if (period & BTTF_Period_PM) {
+        TIM1->CCER2 |= TIM1_CCER2_CC4E;
+    } else {
+        TIM1->CCER2 &= ~TIM1_CCER2_CC4E;
+    }
+}
+
+/**
+ * Configure the PWM duty cycle for the AM, PM and time-separator LEDs
+ * @param brightness - value from 0 to 7
+ */
+void setLedBrightness(uint8_t brightness)
+{
+    // CIE1931 brightness table to provide linear brightness steps
+    static const uint16_t cie_brightness_table[8] = {
+        1, 146, 465, 1070, 2054, 3507, 5523, 8192
+    };
+
+    // Clamp brightness to available levels
+    if (brightness >= 8) {
+        brightness = 7;
+    }
+
+    const uint16_t compareValue = cie_brightness_table[brightness];
+
+    // Set the value TIM1 and TIM2 will count to
+    {
+        const uint16_t overflow = 8192;
+
+        TIM1->ARRH = overflow >> 8;
+        TIM1->ARRL = overflow;
+        TIM2->ARRH = overflow >> 8;
+        TIM2->ARRL = overflow;
+    }
+
+    // Set the timer value the LEDs will be enabled under (duty cycle)
+    {
+        const uint8_t compareValueHigh = compareValue >> 8;
+        const uint8_t compareValueLow = compareValue & 0xFF;
+
+        TIM1->CCR3H = compareValueHigh;
+        TIM1->CCR3L = compareValueLow;
+        TIM1->CCR4H = compareValueHigh;
+        TIM1->CCR4L = compareValueLow;
+        TIM2->CCR1H = compareValueHigh;
+        TIM2->CCR1L = compareValueLow;
+    }
+
+    // Set the output mode for each LED
+    TIM1->CCMR3 = TIM1_OCMODE_PWM1; // AM LED
+    TIM1->CCMR4 = TIM1_OCMODE_PWM1; // PM LED
+    TIM2->CCMR1 = TIM2_OCMODE_PWM1; // Time separator
+
+    // Allow TIM1 outputs to work (the "main output enable" bit defaults to off on this timer)
+    TIM1->BKR |= TIM1_BKR_MOE;
+
+    // Enable timers
+    TIM1->CR1 |= TIM1_CR1_CEN;
+    TIM2->CR1 |= TIM2_CR1_CEN;
+}
+
 void configureDisplayTimer()
 {
     // Prescale by 128 to a 125KHz clock (assuming 16MHz main clock)
@@ -283,6 +370,9 @@ int main(void)
 
     // Setup display refresh rate
     configureDisplayTimer();
+
+    // Default LED brightness to a low level
+    setLedBrightness(1);
 
     // Enable shift register outputs
     enableOutputs();
